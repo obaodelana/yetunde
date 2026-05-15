@@ -2,6 +2,7 @@ import yt_dlp
 from typing import Optional, Dict, Any
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
+from .errors import DownloadError, ExtractionError
 
 def get_audio_quality_format(quality: AudioQuality) -> str:
     if quality == AudioQuality.LOW:
@@ -14,6 +15,23 @@ def get_audio_quality_format(quality: AudioQuality) -> str:
 def get_video_quality_format(quality: VideoQuality) -> str:
     height = quality.value.replace("p", "")
     return f"bestvideo[height<={height}]"
+
+def _run_ydl(ydl_opts: Dict[str, Any], url: str) -> Dict[str, Any]:
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info_dict = ydl.extract_info(url, download=True)
+                if not info_dict:
+                    raise ExtractionError(f"Could not extract info for URL: {url}")
+                return info_dict
+            except yt_dlp.utils.DownloadError as e:
+                raise DownloadError(f"Failed to download {url}: {str(e)}") from e
+            except Exception as e:
+                raise ExtractionError(f"Extraction failed for {url}: {str(e)}") from e
+    except Exception as e:
+        if isinstance(e, (DownloadError, ExtractionError)):
+            raise
+        raise DownloadError(f"An unexpected error occurred: {str(e)}") from e
 
 def audio_download(
     url: str,
@@ -37,9 +55,7 @@ def audio_download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        return info_dict
+    return _run_ydl(ydl_opts, url)
 
 def video_download(
     url: str,
@@ -67,9 +83,7 @@ def video_download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        return info_dict
+    return _run_ydl(ydl_opts, url)
 
 def download(
     url: str,
@@ -97,6 +111,4 @@ def download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        return info_dict
+    return _run_ydl(ydl_opts, url)
