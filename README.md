@@ -76,6 +76,8 @@ for url, result in results.items():
 
 ### Error Handling
 
-If there are download issues, `yetunde` will raise exceptions based on `YetundeError`:
-- `DownloadError`: Raised when the actual download process fails.
-- `ExtractionError`: Raised when `yt-dlp` fails to extract info from the given URL.
+If there are download issues, `yetunde` will raise a `YetundeError`. The exception object contains helpful fields:
+- `url`: The URL that caused the error.
+- `error_type`: E.g., 'download' or 'extraction'.
+- `original_error`: The original exception raised by `yt-dlp`.
+- `message`: A descriptive error message.

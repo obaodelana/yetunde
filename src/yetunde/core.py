@@ -2,7 +2,7 @@ import yt_dlp
 from typing import Optional, Dict, Any
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
-from .errors import DownloadError, ExtractionError
+from .errors import YetundeError
 
 def get_audio_quality_format(quality: AudioQuality) -> str:
     if quality == AudioQuality.LOW:
@@ -22,16 +22,35 @@ def _run_ydl(ydl_opts: Dict[str, Any], url: str) -> Dict[str, Any]:
             try:
                 info_dict = ydl.extract_info(url, download=True)
                 if not info_dict:
-                    raise ExtractionError(f"Could not extract info for URL: {url}")
+                    raise YetundeError(
+                        message=f"Could not extract info for URL: {url}",
+                        url=url,
+                        error_type="extraction"
+                    )
                 return info_dict
             except yt_dlp.utils.DownloadError as e:
-                raise DownloadError(f"Failed to download {url}: {str(e)}") from e
+                raise YetundeError(
+                    message=f"Failed to download {url}: {str(e)}",
+                    url=url,
+                    error_type="download",
+                    original_error=e
+                ) from e
             except Exception as e:
-                raise ExtractionError(f"Extraction failed for {url}: {str(e)}") from e
+                raise YetundeError(
+                    message=f"Extraction failed for {url}: {str(e)}",
+                    url=url,
+                    error_type="extraction",
+                    original_error=e
+                ) from e
     except Exception as e:
-        if isinstance(e, (DownloadError, ExtractionError)):
+        if isinstance(e, YetundeError):
             raise
-        raise DownloadError(f"An unexpected error occurred: {str(e)}") from e
+        raise YetundeError(
+            message=f"An unexpected error occurred: {str(e)}",
+            url=url,
+            error_type="unknown",
+            original_error=e
+        ) from e
 
 def audio_download(
     url: str,
