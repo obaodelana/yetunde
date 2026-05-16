@@ -8,10 +8,7 @@ from yetunde import (
     VideoFormat,
     audio_download,
     video_download,
-    download,
-    bulk_audio_download,
-    bulk_video_download,
-    bulk_download
+    download
 )
 
 class TestYetunde(unittest.TestCase):
