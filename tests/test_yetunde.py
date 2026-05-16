@@ -70,24 +70,46 @@ class TestYetunde(unittest.TestCase):
         self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
         self.assertEqual(ydl_opts['postprocessors'][0]['preferedformat'], 'mp4')
 
-    @patch('yetunde.bulk.audio_download')
-    def test_bulk_audio_download(self, mock_audio_download):
-        def side_effect(url, **kwargs):
-            if url == "http://example.com/fail":
+    @patch('yt_dlp.YoutubeDL')
+    def test_audio_download_bulk(self, mock_ydl):
+        mock_instance = MagicMock()
+        def side_effect(url, download=True):
+            if "fail" in url:
                 raise ValueError("Simulated failure")
             return {"title": f"Test {url}"}
-
-        mock_audio_download.side_effect = side_effect
+        mock_instance.extract_info.side_effect = side_effect
+        mock_ydl.return_value.__enter__.return_value = mock_instance
 
         urls = ["http://example.com/1", "http://example.com/fail", "http://example.com/2"]
-        results = bulk_audio_download(urls)
+        results = audio_download(urls)
 
         self.assertEqual(len(results), 3)
         self.assertEqual(results["http://example.com/1"]["status"], "success")
         self.assertEqual(results["http://example.com/1"]["data"], {"title": "Test http://example.com/1"})
-
         self.assertEqual(results["http://example.com/fail"]["status"], "error")
-        self.assertEqual(results["http://example.com/fail"]["error"], "Simulated failure")
+        self.assertIn("Simulated failure", results["http://example.com/fail"]["error"])
+
+    def test_invalid_input(self):
+        with self.assertRaises(ValueError):
+            audio_download(123)
+        with self.assertRaises(ValueError):
+            audio_download(["url1", 123])
+
+    @patch('yt_dlp.YoutubeDL')
+    def test_playlist_support(self, mock_ydl):
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = {"title": "Playlist", "_type": "playlist"}
+        mock_ydl.return_value.__enter__.return_value = mock_instance
+
+        # Test with playlist=True (default)
+        download("http://example.com/playlist", playlist=True)
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertFalse(ydl_opts['noplaylist'])
+
+        # Test with playlist=False
+        download("http://example.com/playlist", playlist=False)
+        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertTrue(ydl_opts['noplaylist'])
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,26 +1,7 @@
-import concurrent.futures
 from typing import List, Dict, Any, Optional
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
 from .core import audio_download, video_download, download
-
-def _run_bulk(func, urls: List[str], **kwargs) -> Dict[str, Any]:
-    results = {}
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # submit tasks
-        future_to_url = {executor.submit(func, url, **kwargs): url for url in urls}
-
-        # collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_url):
-            url = future_to_url[future]
-            try:
-                data = future.result()
-                results[url] = {"status": "success", "data": data}
-            except Exception as exc:
-                results[url] = {"status": "error", "error": str(exc)}
-
-    return results
 
 def bulk_audio_download(
     urls: List[str],
@@ -28,15 +9,16 @@ def bulk_audio_download(
     quality: AudioQuality = AudioQuality.HIGH,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
-    return _run_bulk(
-        audio_download,
+    return audio_download(
         urls,
         format=format,
         quality=quality,
         filename=filename,
-        retries=retries
+        retries=retries,
+        playlist=playlist
     )
 
 def bulk_video_download(
@@ -45,15 +27,16 @@ def bulk_video_download(
     quality: VideoQuality = VideoQuality.RES_1080P,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
-    return _run_bulk(
-        video_download,
+    return video_download(
         urls,
         format=format,
         quality=quality,
         filename=filename,
-        retries=retries
+        retries=retries,
+        playlist=playlist
     )
 
 def bulk_download(
@@ -62,13 +45,14 @@ def bulk_download(
     quality: VideoQuality = VideoQuality.RES_1080P,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
-    return _run_bulk(
-        download,
+    return download(
         urls,
         format=format,
         quality=quality,
         filename=filename,
-        retries=retries
+        retries=retries,
+        playlist=playlist
     )

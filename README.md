@@ -14,9 +14,9 @@ pip install yetunde
 
 ## Usage
 
-### Simple Downloads
+### Simple & Bulk Downloads
 
-The core interface provides three main functions depending on what you want to download. All functions accept an optional `filename` using `yt-dlp` formatting, and an optional `retries` parameter (defaults to 3).
+The core interface provides three main functions that accept either a single URL string or a list of URL strings. When a list is provided, downloads happen concurrently. All functions accept an optional `filename` using `yt-dlp` formatting, an optional `retries` parameter (defaults to 3), and a `playlist` boolean to enable/disable playlist support (defaults to `True`).
 
 ```python
 from yetunde import (
@@ -29,50 +29,33 @@ from yetunde import (
     VideoFormat
 )
 
-# Download an audio file (default is high quality MP3)
+# Single URL: returns the download info dictionary
 result = audio_download(
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     format=AudioFormat.MP3,
     quality=AudioQuality.HIGH
 )
 
-# Download video only (without audio)
-result = video_download(
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    format=VideoFormat.MP4,
-    quality=VideoQuality.RES_1080P
-)
-
-# Download merged video and audio
-result = download(
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    format=VideoFormat.MKV,
-    quality=VideoQuality.RES_720P,
-    filename="%(title)s.%(ext)s",
-    retries=5
-)
-```
-
-### Bulk Downloads
-
-You can download multiple URLs concurrently. The functions will return a dictionary summarizing the success or error for each URL.
-
-```python
-from yetunde import bulk_download
-
+# Multiple URLs: returns a dictionary of results keyed by URL
 urls = [
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    "https://www.youtube.com/watch?v=badurl"
+    "https://www.youtube.com/watch?v=another-video"
 ]
+results = download(urls, format=VideoFormat.MP4, quality=VideoQuality.RES_1080P)
 
-results = bulk_download(urls)
-
-for url, result in results.items():
-    if result["status"] == "success":
-        print(f"Successfully downloaded {url}")
+for url, res in results.items():
+    if res["status"] == "success":
+        print(f"Downloaded {url}")
     else:
-        print(f"Failed to download {url}: {result['error']}")
+        print(f"Error {url}: {res['error']}")
+
+# Playlist support: Enabled by default
+result = download("https://www.youtube.com/playlist?list=...", playlist=True)
 ```
+
+### Legacy Bulk Functions
+
+For backward compatibility, the `bulk_*` functions are still available and now simply wrap the unified functions.
 
 ### Error Handling
 

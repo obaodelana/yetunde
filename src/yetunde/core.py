@@ -1,5 +1,6 @@
 import yt_dlp
-from typing import Optional, Dict, Any
+import concurrent.futures
+from typing import Optional, Dict, Any, Union, List
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
 from .errors import YetundeError
@@ -16,7 +17,34 @@ def get_video_quality_format(quality: VideoQuality) -> str:
     height = quality.value.replace("p", "")
     return f"bestvideo[height<={height}]"
 
-def _run_ydl(ydl_opts: Dict[str, Any], url: str) -> Dict[str, Any]:
+def _run_bulk(func, urls: List[str], **kwargs) -> Dict[str, Any]:
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # submit tasks
+        future_to_url = {executor.submit(func, url, **kwargs): url for url in urls}
+
+        # collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                data = future.result()
+                results[url] = {"status": "success", "data": data}
+            except Exception as exc:
+                results[url] = {"status": "error", "error": str(exc)}
+
+    return results
+
+def _handle_url_input(url: Any) -> List[str]:
+    if isinstance(url, str):
+        return [url]
+    if isinstance(url, list):
+        if not all(isinstance(u, str) for u in url):
+            raise ValueError("All items in the list must be strings")
+        return url
+    raise ValueError("url must be a string or a list of strings")
+
+def _run_ydl(ydl_opts: Dict[str, Any], url: str, playlist: bool = True) -> Dict[str, Any]:
+    ydl_opts["noplaylist"] = not playlist
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
@@ -52,13 +80,14 @@ def _run_ydl(ydl_opts: Dict[str, Any], url: str) -> Dict[str, Any]:
             original_error=e
         ) from e
 
-def audio_download(
+def _audio_download_single(
     url: str,
     format: AudioFormat = AudioFormat.MP3,
     quality: AudioQuality = AudioQuality.HIGH,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
     audio_format_str = get_audio_quality_format(quality)
 
@@ -74,15 +103,45 @@ def audio_download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url)
+    return _run_ydl(ydl_opts, url, playlist=playlist)
 
-def video_download(
+def audio_download(
+    url: Union[str, List[str]],
+    format: AudioFormat = AudioFormat.MP3,
+    quality: AudioQuality = AudioQuality.HIGH,
+    *,
+    filename: Optional[str] = None,
+    retries: int = 3,
+    playlist: bool = True
+) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+    urls = _handle_url_input(url)
+    if isinstance(url, list):
+        return _run_bulk(
+            _audio_download_single,
+            urls,
+            format=format,
+            quality=quality,
+            filename=filename,
+            retries=retries,
+            playlist=playlist
+        )
+    return _audio_download_single(
+        url,
+        format=format,
+        quality=quality,
+        filename=filename,
+        retries=retries,
+        playlist=playlist
+    )
+
+def _video_download_single(
     url: str,
     format: VideoFormat = VideoFormat.MP4,
     quality: VideoQuality = VideoQuality.RES_1080P,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
     video_format_str = get_video_quality_format(quality)
 
@@ -92,8 +151,6 @@ def video_download(
         'merge_output_format': format.value,
     }
 
-    # yt-dlp uses 'merge_output_format' mainly when combining. If it's a single video file,
-    # FFmpegVideoConvertor may be needed.
     ydl_opts['postprocessors'] = [{
         'key': 'FFmpegVideoConvertor',
         'preferedformat': format.value,
@@ -102,15 +159,45 @@ def video_download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url)
+    return _run_ydl(ydl_opts, url, playlist=playlist)
 
-def download(
+def video_download(
+    url: Union[str, List[str]],
+    format: VideoFormat = VideoFormat.MP4,
+    quality: VideoQuality = VideoQuality.RES_1080P,
+    *,
+    filename: Optional[str] = None,
+    retries: int = 3,
+    playlist: bool = True
+) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+    urls = _handle_url_input(url)
+    if isinstance(url, list):
+        return _run_bulk(
+            _video_download_single,
+            urls,
+            format=format,
+            quality=quality,
+            filename=filename,
+            retries=retries,
+            playlist=playlist
+        )
+    return _video_download_single(
+        url,
+        format=format,
+        quality=quality,
+        filename=filename,
+        retries=retries,
+        playlist=playlist
+    )
+
+def _download_single(
     url: str,
     format: VideoFormat = VideoFormat.MP4,
     quality: VideoQuality = VideoQuality.RES_1080P,
     *,
     filename: Optional[str] = None,
-    retries: int = 3
+    retries: int = 3,
+    playlist: bool = True
 ) -> Dict[str, Any]:
     # Download merged video + audio
     video_format_str = get_video_quality_format(quality)
@@ -130,4 +217,33 @@ def download(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url)
+    return _run_ydl(ydl_opts, url, playlist=playlist)
+
+def download(
+    url: Union[str, List[str]],
+    format: VideoFormat = VideoFormat.MP4,
+    quality: VideoQuality = VideoQuality.RES_1080P,
+    *,
+    filename: Optional[str] = None,
+    retries: int = 3,
+    playlist: bool = True
+) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+    urls = _handle_url_input(url)
+    if isinstance(url, list):
+        return _run_bulk(
+            _download_single,
+            urls,
+            format=format,
+            quality=quality,
+            filename=filename,
+            retries=retries,
+            playlist=playlist
+        )
+    return _download_single(
+        url,
+        format=format,
+        quality=quality,
+        filename=filename,
+        retries=retries,
+        playlist=playlist
+    )
