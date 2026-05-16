@@ -13,8 +13,9 @@ from yetunde import (
 
 class TestYetunde(unittest.TestCase):
 
+    @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
-    def test_audio_download(self, mock_ydl):
+    def test_audio_download(self, mock_ydl, mock_sleep):
         mock_instance = MagicMock()
         mock_instance.extract_info.return_value = {"title": "Test Audio"}
         mock_ydl.return_value.__enter__.return_value = mock_instance
@@ -31,8 +32,9 @@ class TestYetunde(unittest.TestCase):
         self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegExtractAudio')
         self.assertEqual(ydl_opts['postprocessors'][0]['preferredcodec'], 'mp3')
 
+    @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
-    def test_video_download(self, mock_ydl):
+    def test_video_download(self, mock_ydl, mock_sleep):
         mock_instance = MagicMock()
         mock_instance.extract_info.return_value = {"title": "Test Video"}
         mock_ydl.return_value.__enter__.return_value = mock_instance
@@ -49,8 +51,9 @@ class TestYetunde(unittest.TestCase):
         self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
         self.assertEqual(ydl_opts['postprocessors'][0]['preferedformat'], 'mkv')
 
+    @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
-    def test_download(self, mock_ydl):
+    def test_download(self, mock_ydl, mock_sleep):
         mock_instance = MagicMock()
         mock_instance.extract_info.return_value = {"title": "Test Combined"}
         mock_ydl.return_value.__enter__.return_value = mock_instance
@@ -67,8 +70,9 @@ class TestYetunde(unittest.TestCase):
         self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
         self.assertEqual(ydl_opts['postprocessors'][0]['preferedformat'], 'mp4')
 
+    @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
-    def test_audio_download_bulk(self, mock_ydl):
+    def test_audio_download_bulk(self, mock_ydl, mock_sleep):
         mock_instance = MagicMock()
         def side_effect(url, download=True):
             if "fail" in url:

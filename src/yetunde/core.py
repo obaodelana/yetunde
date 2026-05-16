@@ -1,5 +1,6 @@
 import yt_dlp
 import concurrent.futures
+import time
 from typing import Optional, Dict, Any, Union, List
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
@@ -45,40 +46,59 @@ def _handle_url_input(url: Any) -> List[str]:
 
 def _run_ydl(ydl_opts: Dict[str, Any], url: str, playlist: bool = True) -> Dict[str, Any]:
     ydl_opts["noplaylist"] = not playlist
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info_dict = ydl.extract_info(url, download=True)
-                if not info_dict:
+    retries = ydl_opts.get("retries", 3)
+    last_exception = None
+
+    for attempt in range(retries + 1):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info_dict = ydl.extract_info(url, download=True)
+                    if not info_dict:
+                        raise YetundeError(
+                            message=f"Could not extract info for URL: {url}",
+                            url=url,
+                            error_type="extraction"
+                        )
+                    return info_dict
+                except yt_dlp.utils.DownloadError as e:
                     raise YetundeError(
-                        message=f"Could not extract info for URL: {url}",
+                        message=f"Failed to download {url}: {str(e)}",
                         url=url,
-                        error_type="extraction"
-                    )
-                return info_dict
-            except yt_dlp.utils.DownloadError as e:
-                raise YetundeError(
-                    message=f"Failed to download {url}: {str(e)}",
-                    url=url,
-                    error_type="download",
-                    original_error=e
-                ) from e
-            except Exception as e:
-                raise YetundeError(
-                    message=f"Extraction failed for {url}: {str(e)}",
-                    url=url,
-                    error_type="extraction",
-                    original_error=e
-                ) from e
-    except Exception as e:
-        if isinstance(e, YetundeError):
+                        error_type="download",
+                        original_error=e
+                    ) from e
+                except Exception as e:
+                    raise YetundeError(
+                        message=f"Extraction failed for {url}: {str(e)}",
+                        url=url,
+                        error_type="extraction",
+                        original_error=e
+                    ) from e
+        except YetundeError as e:
+            last_exception = e
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+                continue
             raise
-        raise YetundeError(
-            message=f"An unexpected error occurred: {str(e)}",
-            url=url,
-            error_type="unknown",
-            original_error=e
-        ) from e
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+                continue
+            raise YetundeError(
+                message=f"An unexpected error occurred: {str(e)}",
+                url=url,
+                error_type="unknown",
+                original_error=e
+            ) from e
+
+    if last_exception:
+        raise last_exception
+    raise YetundeError(
+        message=f"Failed to download {url} after {retries} retries",
+        url=url,
+        error_type="unknown"
+    )
 
 def _audio_download_single(
     url: str,

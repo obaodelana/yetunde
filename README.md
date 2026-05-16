@@ -53,10 +53,6 @@ for url, res in results.items():
 result = download("https://www.youtube.com/playlist?list=...", playlist=True)
 ```
 
-### Legacy Bulk Functions
-
-For backward compatibility, the `bulk_*` functions are still available and now simply wrap the unified functions.
-
 ### Error Handling
 
 If there are download issues, `yetunde` will raise a `YetundeError`. The exception object contains helpful fields:
