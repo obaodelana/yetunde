@@ -28,7 +28,9 @@ The core interface provides three main functions that accept either a single URL
   ```
 - **Multiple URLs (Bulk):** Returns an **async generator** yielding each video as it finishes downloading. This allows real-time iteration (`async for ...`) without waiting for all downloads to complete.
 
-All functions accept an optional `filename` using `yt-dlp` formatting, an optional `retries` parameter (defaults to 3), and a `playlist` boolean to enable/disable playlist support (defaults to `True`).
+All functions accept an optional `filename` using `yt-dlp` formatting, an optional `retries` parameter (defaults to 3), and a `quiet` boolean to suppress `yt-dlp`'s verbose output and keep your terminal clean (defaults to `True`).
+
+Playlists and channels are **automatically detected and downloaded concurrently** using the async generator.
 
 ```python
 import asyncio
@@ -65,9 +67,15 @@ async def main():
 
 asyncio.run(main())
 
-# Playlist support (returns list of paths in 'path' key): Enabled by default
-result = download("https://www.youtube.com/playlist?list=...", playlist=True)
-print(result["path"])  # List of downloaded video file paths
+# Playlist / Channel support (automatically detects and returns an async generator yielding downloads in real time):
+async def main():
+    async for video in download("https://www.youtube.com/playlist?list=..."):
+        if video.get("status") == "error":
+            print(f"Failed to download {video['url']}: {video['error']}")
+        else:
+            print(f"Downloaded {video['url']} to {video['path']}")
+
+asyncio.run(main())
 ```
 
 ### Error Handling
