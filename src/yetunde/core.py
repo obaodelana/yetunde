@@ -2,7 +2,7 @@ import yt_dlp
 from yt_dlp.utils import DownloadError
 import asyncio
 import time
-from typing import Optional, Dict, Any, Union, List
+from typing import Optional, Dict, Any, List
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
 from .errors import YetundeError
@@ -41,23 +41,6 @@ async def _run_bulk_gen(func, urls: List[str], **kwargs):
                 "error": result["error"],
                 "status": "error"
             }
-
-
-def _handle_url_input(url: Any) -> List[str]:
-    if isinstance(url, str):
-        return [url]
-    if isinstance(url, list):
-        if not all(isinstance(u, str) for u in url):
-            raise ValueError("All items in the list must be strings")
-        return url
-    raise ValueError("url must be a string or a list of strings")
-
-
-def _dispatch_download(url: Union[str, List[str]], single_func, **kwargs):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(single_func, urls, **kwargs)
-    return single_func(url, **kwargs)
 
 
 def _extract_path(info_dict: Dict[str, Any]) -> Optional[str]:
