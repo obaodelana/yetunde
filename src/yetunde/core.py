@@ -206,36 +206,6 @@ def _audio_download_single(
     return _simplify_info(info_dict, url, quality)
 
 
-def audio_download(
-    url: Union[str, List[str]],
-    format: AudioFormat = AudioFormat.MP3,
-    quality: AudioQuality = AudioQuality.HIGH,
-    *,
-    filename: Optional[str] = None,
-    retries: int = 3,
-    playlist: bool = True
-):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _audio_download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _audio_download_single(
-        url,
-        format=format,
-        quality=quality,
-        filename=filename,
-        retries=retries,
-        playlist=playlist
-    )
-
-
 def _video_download_single(
     url: str,
     format: VideoFormat = VideoFormat.MP4,
@@ -263,36 +233,6 @@ def _video_download_single(
 
     info_dict = _run_ydl(ydl_opts, url, playlist=playlist)  # type: ignore
     return _simplify_info(info_dict, url, quality)
-
-
-def video_download(
-    url: Union[str, List[str]],
-    format: VideoFormat = VideoFormat.MP4,
-    quality: VideoQuality = VideoQuality.RES_1080P,
-    *,
-    filename: Optional[str] = None,
-    retries: int = 3,
-    playlist: bool = True
-):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _video_download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _video_download_single(
-        url,
-        format=format,
-        quality=quality,
-        filename=filename,
-        retries=retries,
-        playlist=playlist
-    )
 
 
 def _download_single(
@@ -324,33 +264,3 @@ def _download_single(
 
     info_dict = _run_ydl(ydl_opts, url, playlist=playlist)  # type: ignore
     return _simplify_info(info_dict, url, quality)
-
-
-def download(
-    url: Union[str, List[str]],
-    format: VideoFormat = VideoFormat.MP4,
-    quality: VideoQuality = VideoQuality.RES_1080P,
-    *,
-    filename: Optional[str] = None,
-    retries: int = 3,
-    playlist: bool = True
-):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _download_single(
-        url,
-        format=format,
-        quality=quality,
-        filename=filename,
-        retries=retries,
-        playlist=playlist
-    )

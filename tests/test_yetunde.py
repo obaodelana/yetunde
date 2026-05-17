@@ -169,5 +169,16 @@ class TestYetunde(unittest.IsolatedAsyncioTestCase):
         ydl_opts = mock_ydl.call_args[0][0]
         self.assertTrue(ydl_opts['noplaylist'])
 
+    async def test_strict_kwargs(self):
+        # Passing positional arguments after url should raise TypeError
+        with self.assertRaises(TypeError):
+            download("http://example.com", VideoFormat.MP4)
+            
+        with self.assertRaises(TypeError):
+            audio_download("http://example.com", AudioFormat.MP3)
+            
+        with self.assertRaises(TypeError):
+            video_download("http://example.com", VideoFormat.MP4)
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,5 +1,5 @@
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
-from .core import audio_download, video_download, download
+from .interface import audio_download, video_download, download
 from .errors import YetundeError
 
 __all__ = [
