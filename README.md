@@ -16,9 +16,22 @@ pip install yetunde
 
 ### Simple & Bulk Downloads
 
-The core interface provides three main functions that accept either a single URL string or a list of URL strings. When a list is provided, downloads happen concurrently. All functions accept an optional `filename` using `yt-dlp` formatting, an optional `retries` parameter (defaults to 3), and a `playlist` boolean to enable/disable playlist support (defaults to `True`).
+The core interface provides three main functions that accept either a single URL string or a list of URL strings.
+
+- **Single URL:** Returns a simplified dictionary with key metadata:
+  ```python
+  {
+      "quality": "1080p",  # or bitrate e.g., "320kbps"
+      "path": "/path/to/file.mp4",
+      "url": "https://..."
+  }
+  ```
+- **Multiple URLs (Bulk):** Returns an **async generator** yielding each video as it finishes downloading. This allows real-time iteration (`async for ...`) without waiting for all downloads to complete.
+
+All functions accept an optional `filename` using `yt-dlp` formatting, an optional `retries` parameter (defaults to 3), and a `playlist` boolean to enable/disable playlist support (defaults to `True`).
 
 ```python
+import asyncio
 from yetunde import (
     audio_download,
     video_download,
@@ -29,28 +42,32 @@ from yetunde import (
     VideoFormat
 )
 
-# Single URL: returns the download info dictionary
+# Single URL download
 result = audio_download(
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     format=AudioFormat.MP3,
     quality=AudioQuality.HIGH
 )
+print(result["path"])  # Path to the downloaded file
 
-# Multiple URLs: returns a dictionary of results keyed by URL
-urls = [
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    "https://www.youtube.com/watch?v=another-video"
-]
-results = download(urls, format=VideoFormat.MP4, quality=VideoQuality.RES_1080P)
+# Bulk download with async generator
+async def main():
+    urls = [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?v=another-video"
+    ]
+    
+    async for video in download(urls, format=VideoFormat.MP4, quality=VideoQuality.RES_1080P):
+        if video.get("status") == "error":
+            print(f"Failed to download {video['url']}: {video['error']}")
+        else:
+            print(f"Successfully downloaded {video['url']} to {video['path']} ({video['quality']})")
 
-for url, res in results.items():
-    if res["status"] == "success":
-        print(f"Downloaded {url}")
-    else:
-        print(f"Error {url}: {res['error']}")
+asyncio.run(main())
 
-# Playlist support: Enabled by default
+# Playlist support (returns list of paths in 'path' key): Enabled by default
 result = download("https://www.youtube.com/playlist?list=...", playlist=True)
+print(result["path"])  # List of downloaded video file paths
 ```
 
 ### Error Handling

@@ -1,5 +1,5 @@
 import yt_dlp
-import concurrent.futures
+import asyncio
 import time
 from typing import Optional, Dict, Any, Union, List
 
@@ -18,22 +18,25 @@ def get_video_quality_format(quality: VideoQuality) -> str:
     height = quality.value.replace("p", "")
     return f"bestvideo[height<={height}]"
 
-def _run_bulk(func, urls: List[str], **kwargs) -> Dict[str, Any]:
-    results = {}
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # submit tasks
-        future_to_url = {executor.submit(func, url, **kwargs): url for url in urls}
+async def _run_bulk_gen(func, urls: List[str], **kwargs):
+    async def _wrapped_download(url: str):
+        try:
+            res = await asyncio.to_thread(func, url, **kwargs)
+            return {"status": "success", "data": res}
+        except Exception as e:
+            return {"status": "error", "url": url, "error": str(e)}
 
-        # collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_url):
-            url = future_to_url[future]
-            try:
-                data = future.result()
-                results[url] = {"status": "success", "data": data}
-            except Exception as exc:
-                results[url] = {"status": "error", "error": str(exc)}
-
-    return results
+    tasks = [_wrapped_download(url) for url in urls]
+    for future in asyncio.as_completed(tasks):
+        result = await future
+        if result["status"] == "success":
+            yield result["data"]
+        else:
+            yield {
+                "url": result["url"],
+                "error": result["error"],
+                "status": "error"
+            }
 
 def _handle_url_input(url: Any) -> List[str]:
     if isinstance(url, str):
@@ -43,6 +46,52 @@ def _handle_url_input(url: Any) -> List[str]:
             raise ValueError("All items in the list must be strings")
         return url
     raise ValueError("url must be a string or a list of strings")
+
+def _simplify_info(info_dict: Dict[str, Any], original_url: str, default_quality: Any) -> Dict[str, Any]:
+    if info_dict.get('_type') == 'playlist':
+        entries = info_dict.get('entries', []) or []
+        paths = []
+        for entry in entries:
+            if entry:
+                path = entry.get('_filename') or entry.get('filepath') or entry.get('filename')
+                if path:
+                    paths.append(path)
+        
+        res = None
+        for entry in entries:
+            if entry and (entry.get('height') or entry.get('resolution')):
+                res = f"{entry.get('height')}p" if entry.get('height') else entry.get('resolution')
+                break
+        if not res:
+            res = info_dict.get('resolution')
+        if not res:
+            res = default_quality.value if hasattr(default_quality, 'value') else str(default_quality)
+            
+        return {
+            "quality": res,
+            "path": paths,
+            "url": original_url
+        }
+    else:
+        res = None
+        if info_dict.get('height'):
+            res = f"{info_dict.get('height')}p"
+        elif info_dict.get('resolution'):
+            res = info_dict.get('resolution')
+        elif info_dict.get('abr'):
+            res = f"{int(info_dict.get('abr'))}kbps"
+        elif info_dict.get('format_note'):
+            res = info_dict.get('format_note')
+            
+        if not res:
+            res = default_quality.value if hasattr(default_quality, 'value') else str(default_quality)
+            
+        path = info_dict.get('_filename') or info_dict.get('filepath') or info_dict.get('filename')
+        return {
+            "quality": res,
+            "path": path,
+            "url": original_url
+        }
 
 def _run_ydl(ydl_opts: Dict[str, Any], url: str, playlist: bool = True) -> Dict[str, Any]:
     ydl_opts["noplaylist"] = not playlist
@@ -123,7 +172,8 @@ def _audio_download_single(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url, playlist=playlist)
+    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)
+    return _simplify_info(info_dict, url, quality)
 
 def audio_download(
     url: Union[str, List[str]],
@@ -133,10 +183,10 @@ def audio_download(
     filename: Optional[str] = None,
     retries: int = 3,
     playlist: bool = True
-) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+):
     urls = _handle_url_input(url)
     if isinstance(url, list):
-        return _run_bulk(
+        return _run_bulk_gen(
             _audio_download_single,
             urls,
             format=format,
@@ -179,7 +229,8 @@ def _video_download_single(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url, playlist=playlist)
+    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)
+    return _simplify_info(info_dict, url, quality)
 
 def video_download(
     url: Union[str, List[str]],
@@ -189,10 +240,10 @@ def video_download(
     filename: Optional[str] = None,
     retries: int = 3,
     playlist: bool = True
-) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+):
     urls = _handle_url_input(url)
     if isinstance(url, list):
-        return _run_bulk(
+        return _run_bulk_gen(
             _video_download_single,
             urls,
             format=format,
@@ -237,7 +288,8 @@ def _download_single(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    return _run_ydl(ydl_opts, url, playlist=playlist)
+    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)
+    return _simplify_info(info_dict, url, quality)
 
 def download(
     url: Union[str, List[str]],
@@ -247,10 +299,10 @@ def download(
     filename: Optional[str] = None,
     retries: int = 3,
     playlist: bool = True
-) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+):
     urls = _handle_url_input(url)
     if isinstance(url, list):
-        return _run_bulk(
+        return _run_bulk_gen(
             _download_single,
             urls,
             format=format,
