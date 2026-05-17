@@ -2,8 +2,7 @@ from typing import Optional, Union, List
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
 from .core import (
-    _handle_url_input,
-    _run_bulk_gen,
+    _dispatch_download,
     _audio_download_single,
     _video_download_single,
     _download_single
@@ -18,19 +17,9 @@ def audio_download(
     retries: int = 3,
     playlist: bool = True
 ):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _audio_download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _audio_download_single(
+    return _dispatch_download(
         url,
+        _audio_download_single,
         format=format,
         quality=quality,
         filename=filename,
@@ -47,19 +36,9 @@ def video_download(
     retries: int = 3,
     playlist: bool = True
 ):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _video_download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _video_download_single(
+    return _dispatch_download(
         url,
+        _video_download_single,
         format=format,
         quality=quality,
         filename=filename,
@@ -76,19 +55,9 @@ def download(
     retries: int = 3,
     playlist: bool = True
 ):
-    urls = _handle_url_input(url)
-    if isinstance(url, list):
-        return _run_bulk_gen(
-            _download_single,
-            urls,
-            format=format,
-            quality=quality,
-            filename=filename,
-            retries=retries,
-            playlist=playlist
-        )
-    return _download_single(
+    return _dispatch_download(
         url,
+        _download_single,
         format=format,
         quality=quality,
         filename=filename,

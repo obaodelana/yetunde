@@ -53,6 +53,13 @@ def _handle_url_input(url: Any) -> List[str]:
     raise ValueError("url must be a string or a list of strings")
 
 
+def _dispatch_download(url: Union[str, List[str]], single_func, **kwargs):
+    urls = _handle_url_input(url)
+    if isinstance(url, list):
+        return _run_bulk_gen(single_func, urls, **kwargs)
+    return single_func(url, **kwargs)
+
+
 def _extract_path(info_dict: Dict[str, Any]) -> Optional[str]:
     # 1. Try requested_downloads first as it contains the final post-processed file path(s)
     req_dl = info_dict.get('requested_downloads', [])
