@@ -31,14 +31,20 @@ class TestYetunde(unittest.IsolatedAsyncioTestCase):
             "path": "test.mp3",
             "url": "http://example.com/audio"
         })
-        mock_ydl.assert_called_once()
-        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertEqual(mock_ydl.call_count, 2)
+        
+        # Check first call (flat extraction to check for playlist)
+        first_call_args = mock_ydl.call_args_list[0][0][0]
+        self.assertTrue(first_call_args['extract_flat'])
+        self.assertTrue(first_call_args['quiet'])
 
-        self.assertEqual(ydl_opts['format'], 'bestaudio[abr<=128]')
-        self.assertEqual(ydl_opts['retries'], 5)
-        self.assertEqual(ydl_opts['outtmpl'], 'test.mp3')
-        self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegExtractAudio')
-        self.assertEqual(ydl_opts['postprocessors'][0]['preferredcodec'], 'mp3')
+        # Check second call (actual download)
+        second_call_args = mock_ydl.call_args_list[1][0][0]
+        self.assertEqual(second_call_args['format'], 'bestaudio[abr<=128]')
+        self.assertEqual(second_call_args['retries'], 5)
+        self.assertEqual(second_call_args['outtmpl'], 'test.mp3')
+        self.assertEqual(second_call_args['postprocessors'][0]['key'], 'FFmpegExtractAudio')
+        self.assertEqual(second_call_args['postprocessors'][0]['preferredcodec'], 'mp3')
 
     @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
@@ -58,14 +64,19 @@ class TestYetunde(unittest.IsolatedAsyncioTestCase):
             "path": "test.mp4",
             "url": "http://example.com/video"
         })
-        mock_ydl.assert_called_once()
-        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertEqual(mock_ydl.call_count, 2)
+        
+        # Check first call
+        first_call_args = mock_ydl.call_args_list[0][0][0]
+        self.assertTrue(first_call_args['extract_flat'])
 
-        self.assertEqual(ydl_opts['format'], 'bestvideo[height<=720]')
-        self.assertEqual(ydl_opts['retries'], 3) # default
-        self.assertEqual(ydl_opts['merge_output_format'], 'mkv')
-        self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
-        self.assertEqual(ydl_opts['postprocessors'][0]['preferedformat'], 'mkv')
+        # Check second call
+        second_call_args = mock_ydl.call_args_list[1][0][0]
+        self.assertEqual(second_call_args['format'], 'bestvideo[height<=720]')
+        self.assertEqual(second_call_args['retries'], 3) # default
+        self.assertEqual(second_call_args['merge_output_format'], 'mkv')
+        self.assertEqual(second_call_args['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
+        self.assertEqual(second_call_args['postprocessors'][0]['preferedformat'], 'mkv')
 
     @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
@@ -85,14 +96,19 @@ class TestYetunde(unittest.IsolatedAsyncioTestCase):
             "path": "test_combined.mp4",
             "url": "http://example.com/combined"
         })
-        mock_ydl.assert_called_once()
-        ydl_opts = mock_ydl.call_args[0][0]
+        self.assertEqual(mock_ydl.call_count, 2)
+        
+        # Check first call
+        first_call_args = mock_ydl.call_args_list[0][0][0]
+        self.assertTrue(first_call_args['extract_flat'])
 
-        self.assertEqual(ydl_opts['format'], 'bestvideo[height<=1080]+bestaudio/best')
-        self.assertEqual(ydl_opts['retries'], 3)
-        self.assertEqual(ydl_opts['merge_output_format'], 'mp4')
-        self.assertEqual(ydl_opts['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
-        self.assertEqual(ydl_opts['postprocessors'][0]['preferedformat'], 'mp4')
+        # Check second call
+        second_call_args = mock_ydl.call_args_list[1][0][0]
+        self.assertEqual(second_call_args['format'], 'bestvideo[height<=1080]+bestaudio/best')
+        self.assertEqual(second_call_args['retries'], 3)
+        self.assertEqual(second_call_args['merge_output_format'], 'mp4')
+        self.assertEqual(second_call_args['postprocessors'][0]['key'], 'FFmpegVideoConvertor')
+        self.assertEqual(second_call_args['postprocessors'][0]['preferedformat'], 'mp4')
 
     @patch('time.sleep')
     @patch('yt_dlp.YoutubeDL')
@@ -144,30 +160,51 @@ class TestYetunde(unittest.IsolatedAsyncioTestCase):
     @patch('yt_dlp.YoutubeDL')
     async def test_playlist_support(self, mock_ydl):
         mock_instance = MagicMock()
-        mock_instance.extract_info.return_value = {
-            "title": "Playlist",
-            "_type": "playlist",
-            "entries": [
-                {"_filename": "v1.mp4", "height": 1080},
-                {"_filename": "v2.mp4", "height": 1080}
-            ]
-        }
+        
+        def extract_info_side_effect(url, download=True):
+            if not download:
+                if "playlist" in url:
+                    return {
+                        "title": "Playlist",
+                        "_type": "playlist",
+                        "entries": [
+                            {"webpage_url": "http://example.com/v1"},
+                            {"webpage_url": "http://example.com/v2"}
+                        ]
+                    }
+                else:
+                    return {"title": "Video", "_type": "video"}
+            else:
+                return {
+                    "title": f"Video {url}",
+                    "_filename": f"{url.split('/')[-1]}.mp4",
+                    "height": 1080
+                }
+                
+        mock_instance.extract_info.side_effect = extract_info_side_effect
         mock_ydl.return_value.__enter__.return_value = mock_instance
 
-        # Test with playlist=True (default)
-        result = download("http://example.com/playlist", playlist=True)
-        self.assertEqual(result, {
+        # download("playlist_url") automatically detects it's a playlist
+        # and returns an async generator
+        results = []
+        async for res in download("http://example.com/playlist"):
+            results.append(res)
+            
+        self.assertEqual(len(results), 2)
+        
+        v1 = next(r for r in results if r.get("url") == "http://example.com/v1")
+        self.assertEqual(v1, {
             "quality": "1080p",
-            "path": ["v1.mp4", "v2.mp4"],
-            "url": "http://example.com/playlist"
+            "path": "v1.mp4",
+            "url": "http://example.com/v1"
         })
-        ydl_opts = mock_ydl.call_args[0][0]
-        self.assertFalse(ydl_opts['noplaylist'])
-
-        # Test with playlist=False
-        download("http://example.com/playlist", playlist=False)
-        ydl_opts = mock_ydl.call_args[0][0]
-        self.assertTrue(ydl_opts['noplaylist'])
+        
+        v2 = next(r for r in results if r.get("url") == "http://example.com/v2")
+        self.assertEqual(v2, {
+            "quality": "1080p",
+            "path": "v2.mp4",
+            "url": "http://example.com/v2"
+        })
 
     async def test_strict_kwargs(self):
         # Passing positional arguments after url should raise TypeError

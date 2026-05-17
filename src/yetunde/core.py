@@ -2,7 +2,7 @@ import yt_dlp
 from yt_dlp.utils import DownloadError
 import asyncio
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 from .enums import AudioQuality, VideoQuality, AudioFormat, VideoFormat
 from .errors import YetundeError
@@ -22,15 +22,49 @@ def get_video_quality_format(quality: VideoQuality) -> str:
     return f"bestvideo[height<={height}]"
 
 
-async def _run_bulk_gen(func, urls: List[str], **kwargs):
+def _expand_playlist(url: str, quiet: bool = True) -> Tuple[List[str], bool]:
+    ydl_opts = {
+        'extract_flat': True,
+        'quiet': quiet,
+        'no_warnings': quiet,
+        'noprogress': quiet
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
+        try:
+            info = ydl.extract_info(url, download=False)
+            if info and info.get('_type') == 'playlist':
+                entries = info.get('entries', []) or []
+                urls = []
+                for entry in entries:
+                    if entry:
+                        video_url = entry.get('webpage_url') or entry.get('url')
+                        if video_url:
+                            urls.append(video_url)
+                return urls, True
+        except Exception:
+            pass
+    return [url], False
+
+
+async def _run_bulk_gen(func, urls: List[str], quiet: bool = True, **kwargs):
+    expanded_urls = []
+    
+    async def _expand_task(url: str):
+        res_urls, _ = await asyncio.to_thread(_expand_playlist, url, quiet)
+        return res_urls
+        
+    expansion_tasks = [_expand_task(url) for url in urls]
+    for res_urls in await asyncio.gather(*expansion_tasks):
+        expanded_urls.extend(res_urls)
+
     async def _wrapped_download(url: str):
         try:
-            res = await asyncio.to_thread(func, url, **kwargs)
+            res = await asyncio.to_thread(func, url, quiet=quiet, **kwargs)
             return {"status": "success", "data": res}
         except Exception as e:
             return {"status": "error", "url": url, "error": str(e)}
 
-    tasks = [_wrapped_download(url) for url in urls]
+    tasks = [_wrapped_download(url) for url in expanded_urls]
     for future in asyncio.as_completed(tasks):
         result = await future
         if result["status"] == "success":
@@ -112,8 +146,8 @@ def _simplify_info(info_dict: Dict[str, Any], original_url: str, default_quality
         }
 
 
-def _run_ydl(ydl_opts: Dict[str, Any], url: str, playlist: bool = True) -> Dict[str, Any]:
-    ydl_opts["noplaylist"] = not playlist
+def _run_ydl(ydl_opts: Dict[str, Any], url: str) -> Dict[str, Any]:
+    ydl_opts["noplaylist"] = True
     retries = ydl_opts.get("retries") or 3
     last_exception = None
 
@@ -176,13 +210,16 @@ def _audio_download_single(
     *,
     filename: Optional[str] = None,
     retries: int = 3,
-    playlist: bool = True
+    quiet: bool = True
 ) -> Dict[str, Any]:
     audio_format_str = get_audio_quality_format(quality)
 
-    ydl_opts: yt_dlp._Params = {
+    ydl_opts = {
         'format': audio_format_str,
         'retries': retries,
+        'quiet': quiet,
+        'no_warnings': quiet,
+        'noprogress': quiet,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': format.value,
@@ -192,7 +229,7 @@ def _audio_download_single(
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)  # type: ignore
+    info_dict = _run_ydl(ydl_opts, url)
     return _simplify_info(info_dict, url, quality)
 
 
@@ -203,25 +240,27 @@ def _video_download_single(
     *,
     filename: Optional[str] = None,
     retries: int = 3,
-    playlist: bool = True
+    quiet: bool = True
 ) -> Dict[str, Any]:
     video_format_str = get_video_quality_format(quality)
 
-    ydl_opts: yt_dlp._Params = {
+    ydl_opts = {
         'format': video_format_str,
         'retries': retries,
+        'quiet': quiet,
+        'no_warnings': quiet,
+        'noprogress': quiet,
         'merge_output_format': format.value,
+        'postprocessors': [{
+            'key': 'FFmpegVideoConvertor',
+            'preferedformat': format.value,
+        }]
     }
-
-    ydl_opts['postprocessors'] = [{
-        'key': 'FFmpegVideoConvertor',
-        'preferedformat': format.value,
-    }]
 
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)  # type: ignore
+    info_dict = _run_ydl(ydl_opts, url)
     return _simplify_info(info_dict, url, quality)
 
 
@@ -232,25 +271,27 @@ def _download_single(
     *,
     filename: Optional[str] = None,
     retries: int = 3,
-    playlist: bool = True
+    quiet: bool = True
 ) -> Dict[str, Any]:
     # Download merged video + audio
     video_format_str = get_video_quality_format(quality)
     combined_format = f"{video_format_str}+bestaudio/best"
 
-    ydl_opts: yt_dlp._Params = {
+    ydl_opts = {
         'format': combined_format,
         'retries': retries,
+        'quiet': quiet,
+        'no_warnings': quiet,
+        'noprogress': quiet,
         'merge_output_format': format.value,
+        'postprocessors': [{
+            'key': 'FFmpegVideoConvertor',
+            'preferedformat': format.value,
+        }]
     }
-
-    ydl_opts['postprocessors'] = [{
-        'key': 'FFmpegVideoConvertor',
-        'preferedformat': format.value,
-    }]
 
     if filename:
         ydl_opts['outtmpl'] = filename
 
-    info_dict = _run_ydl(ydl_opts, url, playlist=playlist)  # type: ignore
+    info_dict = _run_ydl(ydl_opts, url)
     return _simplify_info(info_dict, url, quality)
